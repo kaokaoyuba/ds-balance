@@ -159,6 +159,8 @@
 
   .note { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; }
   .hint { font-size: 12.5px; color: var(--muted); margin: 9px 0 0; line-height: 1.6; }
+  #migrateMsg { color: var(--ok); }
+  #migrateMsg.err { color: var(--warn); }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -258,6 +260,7 @@
         <button class="wide" id="importBtn">导入配置</button>
       </div>
       <textarea id="migrateText" placeholder="点「导出配置」生成配置码，或粘贴配置码后点「导入配置」。" spellcheck="false" style="margin-top:12px"></textarea>
+      <p class="hint" id="migrateMsg"></p>
       <p class="hint">配置码包含 API Key 和设置，<b>请勿发给他人</b>。换设备时用它免去重新输入长 Key 的麻烦。</p>
     </div>
   </details>
@@ -318,7 +321,7 @@
     thresholdInput: $('thresholdInput'), notifyToggle: $('notifyToggle'), notifyHint: $('notifyHint'),
     saveBtn: $('saveBtn'), clearBtn: $('clearBtn'), refreshBtn: $('refreshBtn'), settingsBtn: $('settingsBtn'),
     installBtn: $('installBtn'), installCard: $('installCard'), installHint: $('installHint'),
-    settings: $('settings'), migrateText: $('migrateText'),
+    settings: $('settings'), migrateText: $('migrateText'), migrateMsg: $('migrateMsg'),
     exportBtn: $('exportBtn'), importBtn: $('importBtn'), raw: $('raw'), rawBox: $('rawBox'),
   };
 
@@ -804,24 +807,35 @@
 
   // ---------- 配置迁移 ----------
 
+  /**
+   * 导入导出的反馈写在迁移区里，而不是顶部状态栏。
+   * 状态栏会被后台刷新的结果覆盖——用户刚粘贴完一个坏配置码，
+   * 错误提示可能一闪就变成「每 5 分钟自动刷新」，等于没提示。
+   */
+  function migrateSay(text, isErr) {
+    el.migrateMsg.textContent = text;
+    el.migrateMsg.classList.toggle('err', !!isErr);
+  }
+
   function exportCfg() {
     const payload = { v: 1, k: state.key, c: state.cfg, s: state.samples };
     el.migrateText.value = b64encode(JSON.stringify(payload));
     el.migrateText.select();
+    migrateSay('已生成配置码。复制它发到另一台设备，粘贴后点「导入配置」。');
   }
 
   async function importCfg() {
     const raw = el.migrateText.value.trim();
-    if (!raw) { setStatus('请先粘贴配置码', true); return; }
+    if (!raw) { migrateSay('请先粘贴配置码。', true); return; }
 
     let data;
     try {
       data = JSON.parse(b64decode(raw));
     } catch (_) {
-      setStatus('配置码无法解析，请确认复制完整', true);
+      migrateSay('配置码无法解析，请确认复制完整。', true);
       return;
     }
-    if (!data || typeof data !== 'object') { setStatus('配置码内容不正确', true); return; }
+    if (!data || typeof data !== 'object') { migrateSay('配置码内容不正确。', true); return; }
 
     if (typeof data.k === 'string') {
       state.key = data.k;
@@ -849,7 +863,7 @@
     el.migrateText.value = '';
     syncNotifyHint();
     render();
-    setStatus('配置已导入');
+    migrateSay('配置已导入。');
     if (state.key) fetchBalance();
   }
 

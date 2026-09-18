@@ -1,7 +1,7 @@
 // Service Worker：让应用可安装、能离线打开，并提供系统通知通道。
 // 只接管本站资源；发往 api.deepseek.com 的请求原样放行，不缓存、不拦截。
 
-const CACHE = 'dsb-v4';
+const CACHE = 'dsb-v5';
 const ASSETS = [
   './deepseek-balance.html',
   './manifest.json',
