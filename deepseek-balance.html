@@ -77,6 +77,14 @@
   .stat .v.warn { color: var(--warn); }
   .stat .v.dim { color: var(--muted); font-size: 14px; font-weight: 400; }
 
+  /* ---- 走势迷你折线 ---- */
+  .spark { margin-top: 15px; }
+  .spark svg { display: block; overflow: visible; }
+  .sp-line { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .sp-dot circle { fill: var(--accent); }
+  .sp-th { stroke: var(--warn); stroke-width: 1; stroke-dasharray: 3 3; opacity: .5; }
+  .sp-lab { fill: var(--muted); font-size: 10px; }
+
   /* ---- 告警横幅 ---- */
   .banner {
     display: none; align-items: center; gap: 9px;
@@ -183,6 +191,7 @@
         <div class="v dim" id="daysLeft">—</div>
       </div>
     </div>
+    <div class="spark hidden" id="spark"></div>
     <p class="hint" id="predHint">正在积累采样数据…</p>
   </section>
 
@@ -304,7 +313,7 @@
   const el = {
     status: $('status'), banner: $('banner'), bannerText: $('bannerText'),
     balanceCard: $('balanceCard'), amount: $('amount'), cur: $('cur'), value: $('value'), sub: $('sub'),
-    perDay: $('perDay'), daysLeft: $('daysLeft'), predHint: $('predHint'),
+    perDay: $('perDay'), daysLeft: $('daysLeft'), predHint: $('predHint'), spark: $('spark'),
     keyInput: $('keyInput'), eyeBtn: $('eyeBtn'), intervalSel: $('intervalSel'),
     thresholdInput: $('thresholdInput'), notifyToggle: $('notifyToggle'), notifyHint: $('notifyHint'),
     saveBtn: $('saveBtn'), clearBtn: $('clearBtn'), refreshBtn: $('refreshBtn'), settingsBtn: $('settingsBtn'),
@@ -368,6 +377,12 @@
     if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
     if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
     return Math.floor(s / 86400) + ' 天前';
+  }
+
+  function formatDate(ts) {
+    const d = new Date(ts), now = new Date();
+    const md = (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日';
+    return d.getFullYear() === now.getFullYear() ? md : d.getFullYear() + ' 年 ' + md;
   }
 
   // ---------- 存储 ----------
@@ -523,9 +538,62 @@
       el.daysLeft.className = 'v ' + (d <= 7 ? 'warn' : 'ok');
     }
 
+    const spanTxt = p.spanDays < 1 ? p.spanDays.toFixed(1) + ' 天' : Math.round(p.spanDays) + ' 天';
+    // 天数换算成具体日期更好做计划；超过一年就没意义了，不显示
+    const eta = (!idle && p.daysLeft <= 365)
+      ? `按当前速度，大约 ${formatDate(Date.now() + p.daysLeft * DAY)}用完。`
+      : '';
     el.predHint.textContent =
-      `基于最近 ${p.spanDays < 1 ? p.spanDays.toFixed(1) + ' 天' : Math.round(p.spanDays) + ' 天'}内的 ${p.count} 次采样估算。` +
-      `检测到充值后会自动重新累计。`;
+      eta + `基于最近 ${spanTxt}内的 ${p.count} 次采样估算，检测到充值后会自动重新累计。`;
+  }
+
+  /**
+   * 余额走势迷你折线：一条线 + 阈值横线 + 采样点。
+   * 刻意不加坐标轴、网格、图例和交互——它的作用是让你判断上面那个
+   * 「还能用 N 天」靠不靠谱，以及离警戒线还有多远。
+   * 采样点直接画出来，这样数据稀疏是看得见的，不会让一条光滑的线假装很有依据。
+   */
+  function renderSpark() {
+    const box = el.spark;
+    const now = Date.now();
+    const pts = state.samples.filter(p => now - p.t <= WINDOW_MS);
+
+    if (pts.length < 2) {          // 连不成线，交给下面的文字说明
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      return;
+    }
+    box.classList.remove('hidden');
+
+    const W = box.clientWidth;
+    if (!W) return;                // 还没布局出来，等下次 render 或 resize
+
+    const H = 64, padT = 9, padB = 7;
+    const th = state.cfg.threshold;
+    // 纵轴从 0 起：这样折线离阈值线的高度就是真实的余量
+    const top = Math.max(...pts.map(p => p.v), th, 1) * 1.08;
+
+    const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+    const span = t1 - t0;
+    const X = t => (span > 0 ? ((t - t0) / span) * W : W / 2);
+    const Y = v => padT + (1 - v / top) * (H - padT - padB);
+
+    const d = pts.map((p, i) =>
+      (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Y(p.v).toFixed(1)).join(' ');
+    const dots = pts.map(p =>
+      `<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="2.2"/>`).join('');
+
+    const ty = Y(th);
+    const labY = ty < 16 ? ty + 12 : ty - 5;   // 阈值贴近顶部时标签改画到线下方
+    const thTxt = String(+th.toFixed(2));      // 10 而不是 10.00，标签要短
+
+    box.innerHTML =
+      `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" fill="none">` +
+        `<line class="sp-th" x1="0" y1="${ty.toFixed(1)}" x2="${W}" y2="${ty.toFixed(1)}"/>` +
+        `<text class="sp-lab" x="1" y="${labY.toFixed(1)}">阈值 ¥${thTxt}</text>` +
+        `<path class="sp-line" d="${d}"/>` +
+        `<g class="sp-dot">${dots}</g>` +
+      `</svg>`;
   }
 
   // ---------- 告警 ----------
@@ -645,6 +713,7 @@
     }
 
     renderPrediction();
+    renderSpark();
   }
 
   // ---------- 取数 ----------
@@ -859,6 +928,13 @@
 
   // 每分钟刷新一次「x 分钟前」这类相对时间
   setInterval(() => { if (state.lastAt && !state.busy) render(); }, 60000);
+
+  // 折线是按像素宽度画的，横竖屏切换后要重画
+  let sparkTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(sparkTimer);
+    sparkTimer = setTimeout(renderSpark, 150);
+  });
 
   // ---------- PWA：安装成 App + Service Worker ----------
 
