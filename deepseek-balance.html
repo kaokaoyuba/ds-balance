@@ -143,6 +143,10 @@
     background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px;
     padding: 1px 6px; font-size: 12.5px; color: var(--text);
   }
+  /* ---- 安装卡片 ---- */
+  .install-head { font-size: 15px; font-weight: 600; margin-bottom: 9px; }
+  #installBtn { width: 100%; margin-top: 13px; }
+
   .note { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; }
   .hint { font-size: 12.5px; color: var(--muted); margin: 9px 0 0; line-height: 1.6; }
   .hidden { display: none !important; }
@@ -180,7 +184,12 @@
     <p class="hint" id="predHint">正在积累采样数据…</p>
   </section>
 
-  <button class="primary hidden" id="installBtn">安装到手机主屏幕</button>
+  <!-- ===== 安装提示 ===== -->
+  <section class="card install hidden" id="installCard">
+    <div class="install-head">安装成 App</div>
+    <p class="hint" id="installHint">装好后从主屏图标打开就是全屏独立窗口，和普通 App 一样。没看到「一键安装」按钮的话，点浏览器右上角 <b>⋮</b> →「安装应用」（部分版本叫「添加到主屏幕」）。</p>
+    <button class="primary hidden" id="installBtn">一键安装</button>
+  </section>
 
   <div class="row">
     <button class="primary wide" id="refreshBtn">立即刷新</button>
@@ -254,8 +263,8 @@
     <div class="body help">
       <b>装成 App（推荐）</b>
       <ol>
-        <li>手机浏览器打开你的托管网址：<code>https://&lt;用户名&gt;.github.io/&lt;仓库名&gt;/deepseek-balance.html</code></li>
-        <li>点页面上出现的「安装到手机主屏幕」按钮（没出现就用 Chrome 菜单 →「安装应用」）</li>
+        <li>手机浏览器打开 <code>https://kaokaoyuba.github.io/ds-balance/deepseek-balance.html</code></li>
+        <li>点页面上方的「一键安装」。<b>如果那个按钮没出现，或者点了没反应</b>，就点浏览器右上角 <b>⋮</b> →「安装应用」（部分版本叫「添加到主屏幕」）——这条路一定管用</li>
         <li>以后从主屏幕图标点开，就是全屏独立窗口，跟普通 App 一样</li>
       </ol>
       <p class="hint">Key 只需填一次，会记在这台设备上。想在电脑和手机之间同步，用上面的「配置迁移」。</p>
@@ -297,7 +306,7 @@
     keyInput: $('keyInput'), eyeBtn: $('eyeBtn'), intervalSel: $('intervalSel'),
     thresholdInput: $('thresholdInput'), notifyToggle: $('notifyToggle'), notifyHint: $('notifyHint'),
     saveBtn: $('saveBtn'), clearBtn: $('clearBtn'), refreshBtn: $('refreshBtn'), settingsBtn: $('settingsBtn'),
-    installBtn: $('installBtn'),
+    installBtn: $('installBtn'), installCard: $('installCard'), installHint: $('installHint'),
     settings: $('settings'), migrateText: $('migrateText'),
     exportBtn: $('exportBtn'), importBtn: $('importBtn'), raw: $('raw'), rawBox: $('rawBox'),
   };
@@ -802,30 +811,60 @@
   // 每分钟刷新一次「x 分钟前」这类相对时间
   setInterval(() => { if (state.lastAt && !state.busy) render(); }, 60000);
 
-  // ---------- PWA：安装到主屏幕 + Service Worker ----------
+  // ---------- PWA：安装成 App + Service Worker ----------
+
+  // 记下卡片初始的手动安装说明，取消安装时用它还原
+  const MANUAL_HINT = el.installHint.innerHTML;
+
+  const isStandalone = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;   // iOS Safari
 
   let installPrompt = null;
 
+  const syncInstallCard = () => el.installCard.classList.toggle('hidden', isStandalone());
+
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
+    if (isStandalone()) return;
     installPrompt = e;
-    // 已经是独立窗口（装过了）就不再提示
-    if (!window.matchMedia('(display-mode: standalone)').matches) {
-      el.installBtn.classList.remove('hidden');
-    }
+    el.installHint.textContent = '浏览器已就绪，点下面的按钮就能装。';
+    el.installBtn.classList.remove('hidden');
+    syncInstallCard();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null;
+    el.installCard.classList.add('hidden');
+    setStatus('已安装');
   });
 
   el.installBtn.addEventListener('click', async () => {
     if (!installPrompt) return;
-    installPrompt.prompt();
-    try { await installPrompt.userChoice; } catch (_) {}
-    installPrompt = null;
+    const p = installPrompt;
+    installPrompt = null;   // 这个事件对象只能用一次
+
+    let outcome = 'unknown';
+    try {
+      p.prompt();
+      outcome = (await p.userChoice).outcome;
+    } catch (_) {}
+
+    if (outcome === 'accepted') {
+      el.installCard.classList.add('hidden');
+      setStatus('已安装');
+      return;
+    }
+
+    // 被取消、或 Chrome 压根没弹窗（此前拒绝过安装就会这样）。
+    // 事件已消耗，本次会话按钮不会再有效——收起按钮并还原手动说明，
+    // 否则用户点完只剩一个消失的按钮，无从下手。
     el.installBtn.classList.add('hidden');
+    el.installHint.innerHTML = MANUAL_HINT;
+    setStatus('未安装，可按说明手动添加');
   });
 
-  if (window.matchMedia('(display-mode: standalone)').matches) {
-    el.installBtn.classList.add('hidden');
-  }
+  syncInstallCard();
 
   // file:// 下注册会失败，静默忽略即可
   if ('serviceWorker' in navigator) {
