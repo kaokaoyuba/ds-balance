@@ -61,6 +61,8 @@
   .amount .cur { font-size: 26px; color: var(--muted); margin-right: 4px; vertical-align: 12px; }
   .card.alert .amount { color: var(--warn); }
   .amount.dim { color: var(--muted); font-size: 34px; }
+  /* 数据不是刚取回来的：保持可读，但明确弱化，避免旧值被当成当前值 */
+  .amount.stale { opacity: .55; }
   .sub { margin-top: 8px; font-size: 13px; color: var(--muted); }
 
   /* ---- 预测 ---- */
@@ -291,7 +293,7 @@
   'use strict';
 
   const API = 'https://api.deepseek.com/user/balance';
-  const LS = { key: 'dsb.key', cfg: 'dsb.cfg', samples: 'dsb.samples', above: 'dsb.above' };
+  const LS = { key: 'dsb.key', cfg: 'dsb.cfg', samples: 'dsb.samples', above: 'dsb.above', last: 'dsb.last' };
   const DAY = 86400000, HOUR = 3600000;
   const WINDOW_MS = 7 * DAY;      // 预测只回看最近 7 天
   const MIN_SPAN_MS = 2 * HOUR;   // 至少要跨 2 小时才能算斜率
@@ -318,6 +320,8 @@
     lastValue: null,   // 最近一次成功获取的余额
     lastAt: null,      // 最近一次成功获取的时间
     isAvailable: null, // 接口返回的 is_available
+    curLabel: '¥',     // 币种符号，随余额一起缓存
+    failed: false,     // 最近一次刷新是否失败（失败则已有数字不可信）
     below: false,      // 当前是否低于阈值
     busy: false,       // 请求进行中
   };
@@ -389,12 +393,47 @@
       state.samples = [];
     }
 
+    // 上次成功获取的余额：断网或还没请求回来时，先把这个显示出来
+    try {
+      const c = JSON.parse(localStorage.getItem(LS.last) || 'null');
+      if (c && isFinite(c.v) && isFinite(c.t)) {
+        state.lastValue = c.v;
+        state.lastAt = c.t;
+        state.isAvailable = c.a === undefined ? null : c.a;
+        if (c.c) state.curLabel = c.c === 'CNY' ? '¥' : c.c + ' ';
+      }
+    } catch (_) {}
+
     // 上次是否处于「低于阈值」状态，避免每次打开页面都重复告警
     state.below = localStorage.getItem(LS.above) === '0';
   }
 
   const saveCfg = () => localStorage.setItem(LS.cfg, JSON.stringify(state.cfg));
   const saveSamples = () => localStorage.setItem(LS.samples, JSON.stringify(state.samples));
+
+  function saveLast(info) {
+    try {
+      localStorage.setItem(LS.last, JSON.stringify({
+        v: info.value, t: Date.now(), a: info.available, c: info.currency,
+      }));
+    } catch (_) {}
+  }
+
+  /**
+   * 当前显示的数字有多可信。
+   * 这是监控工具最容易骗人的地方：刷新失败、或页面放了很久之后，
+   * 旧数字和新数字长得一模一样——而用户正是靠它来决定要不要充值的。
+   */
+  function staleness() {
+    if (state.lastAt === null) return { stale: false, reason: '' };
+    const age = Date.now() - state.lastAt;
+    if (state.failed) return { stale: true, reason: '刷新失败' };
+    // 自动刷新开着时，两个周期没更新就算过期；关掉时给 30 分钟
+    const min = state.cfg.interval;
+    const limit = min > 0 ? Math.max(2 * min * 60000, 10 * 60000) : 30 * 60000;
+    if (age > limit) return { stale: true, reason: '可能已过期' };
+    return { stale: false, reason: '' };
+  }
 
   // ---------- 采样与预测 ----------
 
@@ -583,11 +622,14 @@
       el.value.textContent = '--';
       el.sub.textContent = state.key ? '尚未获取余额' : '请先在下方设置里填写 API Key';
     } else {
-      el.amount.className = 'amount';
+      const st = staleness();
+      el.amount.className = st.stale ? 'amount stale' : 'amount';
       el.value.textContent = fmt(v);
-      el.cur.textContent = '¥';
+      el.cur.textContent = state.curLabel;
       const when = state.lastAt ? relTime(state.lastAt) : '';
-      el.sub.textContent = (state.isAvailable === false ? '余额不足，API 调用可能受限 · ' : '') + '更新于 ' + when;
+      el.sub.textContent =
+        (state.isAvailable === false ? '余额不足，API 调用可能受限 · ' : '') +
+        '更新于 ' + when + (st.stale ? ' · ' + st.reason : '');
     }
 
     el.balanceCard.classList.toggle('alert', state.below);
@@ -658,17 +700,24 @@
       state.lastValue = info.value;
       state.lastAt = Date.now();
       state.isAvailable = info.available;
-      if (info.currency && info.currency !== 'CNY') el.cur.textContent = info.currency + ' ';
+      state.curLabel = (info.currency && info.currency !== 'CNY') ? info.currency + ' ' : '¥';
+      state.failed = false;
+      saveLast(info);
 
       recordSample(info.value);
       checkAlert(info.value);
       render();
       setStatus(idleStatus());
     } catch (e) {
-      // 区分网络层失败和接口报错，提示更有指向性
-      const netFail = (e instanceof TypeError);
+      // 区分网络层失败和接口报错，提示更有指向性。
+      // 按 name 而不是 instanceof —— 后者跨执行环境（iframe、vm 等）会失效。
+      const netFail = (e && e.name === 'TypeError');
       setStatus(netFail ? '网络请求失败，请检查网络或代理' : '获取失败：' + e.message, true);
       if (!opts.silent) el.rawBox.open = true;
+
+      // 没拿到新数据，就把已有数字标记为不可信——否则旧值会冒充当前值
+      state.failed = true;
+      render();
     } finally {
       state.busy = false;
       el.refreshBtn.disabled = false;
