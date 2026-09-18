@@ -1,0 +1,13 @@
+# 这个仓库只发布 DeepSeek 余额监控这一套 PWA 文件。
+# 采用白名单：默认忽略一切，只放行下面列出的部署所需文件。
+# 这样目录里其他草稿（breakout.html 等）和本地配置（.claude/）永远不会被误传。
+
+*
+!.gitignore
+!deepseek-balance.html
+!manifest.json
+!sw.js
+!icon-192.png
+!icon-512.png
+!apple-touch-icon.png
+!.nojekyll

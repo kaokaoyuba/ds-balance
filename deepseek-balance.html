@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0e17">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>DeepSeek 余额</title>
+<style>
+  :root {
+    --bg: #0b0e17;
+    --panel: #131829;
+    --panel-2: #1a2137;
+    --text: #e6ecff;
+    --muted: #7c89ad;
+    --line: #222c47;
+    --accent: #4d7cff;
+    --ok: #3ddc97;
+    --warn: #ff5a6a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: 22px 16px calc(28px + env(safe-area-inset-bottom));
+    display: flex;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 0%, #1a2140 0%, var(--bg) 60%) fixed;
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 15px;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+
+  header { display: flex; align-items: baseline; gap: 10px; padding: 0 4px; }
+  h1 {
+    margin: 0; font-size: 15px; font-weight: 600;
+    letter-spacing: 3px; color: var(--muted); text-transform: uppercase;
+  }
+  .status { margin-left: auto; font-size: 12.5px; color: var(--muted); text-align: right; }
+  .status.err { color: var(--warn); }
+
+  .card {
+    background: var(--panel);
+    border-radius: 14px;
+    box-shadow: 0 0 0 1px var(--line), 0 24px 60px -28px #000c;
+    padding: 20px;
+  }
+  .card.alert { box-shadow: 0 0 0 1px var(--warn), 0 24px 60px -28px #000c; }
+
+  /* ---- 余额 ---- */
+  .balance { text-align: center; padding: 26px 20px 22px; }
+  .amount {
+    font-size: 52px; font-weight: 600; line-height: 1.05;
+    font-variant-numeric: tabular-nums; letter-spacing: -1px;
+  }
+  .amount .cur { font-size: 26px; color: var(--muted); margin-right: 4px; vertical-align: 12px; }
+  .card.alert .amount { color: var(--warn); }
+  .amount.dim { color: var(--muted); font-size: 34px; }
+  .sub { margin-top: 8px; font-size: 13px; color: var(--muted); }
+
+  /* ---- 预测 ---- */
+  .stats { display: flex; gap: 1px; background: var(--line); border-radius: 12px; overflow: hidden; margin-top: 4px; }
+  .stat { flex: 1; background: var(--panel-2); padding: 14px 12px; text-align: center; }
+  .stat .k { font-size: 12px; color: var(--muted); }
+  .stat .v {
+    margin-top: 5px; font-size: 19px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .v.ok { color: var(--ok); }
+  .stat .v.warn { color: var(--warn); }
+  .stat .v.dim { color: var(--muted); font-size: 14px; font-weight: 400; }
+
+  /* ---- 告警横幅 ---- */
+  .banner {
+    display: none; align-items: center; gap: 9px;
+    background: #2a1220; box-shadow: 0 0 0 1px #5b2233;
+    border-radius: 12px; padding: 12px 14px; font-size: 13.5px; color: #ffb3c0;
+  }
+  .banner.on { display: flex; }
+  .banner .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+
+  /* ---- 控件 ---- */
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 14px; color: var(--text);
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 9px; padding: 9px 16px; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button:hover { background: #212a45; border-color: #33406a; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover { background: #3f6bee; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.wide { flex: 1; }
+
+  label.field { display: block; margin-bottom: 14px; }
+  label.field:last-child { margin-bottom: 0; }
+  .label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    font: inherit; font-size: 14px; width: 100%;
+    color: var(--text); background: #0e1322;
+    border: 1px solid var(--line); border-radius: 9px;
+    padding: 9px 11px; outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 84px; font-size: 12.5px; word-break: break-all; }
+  select { appearance: none; background-image: none; }
+  .input-row { display: flex; gap: 8px; }
+  .input-row input { flex: 1; min-width: 0; }
+  .btn-sm { padding: 9px 13px; font-size: 13px; flex: none; }
+
+  .check { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--muted); cursor: pointer; }
+  .check input { width: 17px; height: 17px; accent-color: var(--accent); flex: none; }
+
+  details { background: var(--panel); border-radius: 14px; box-shadow: 0 0 0 1px var(--line); overflow: hidden; }
+  details > summary {
+    cursor: pointer; padding: 14px 20px; font-size: 13.5px; color: var(--muted);
+    list-style: none; user-select: none;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::after { content: "▾"; float: right; transition: transform .2s; }
+  details[open] > summary::after { transform: rotate(180deg); }
+  details > summary:hover { color: var(--text); }
+  .body { padding: 0 20px 20px; }
+
+  pre {
+    margin: 0; padding: 12px; max-height: 260px; overflow: auto;
+    background: #0e1322; border: 1px solid var(--line); border-radius: 9px;
+    font-size: 12px; line-height: 1.55; color: var(--muted);
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .help { font-size: 13.5px; line-height: 1.75; color: var(--muted); }
+  .help ol { margin: 0; padding-left: 20px; }
+  .help li { margin-bottom: 5px; }
+  .help b { color: var(--text); font-weight: 600; }
+  .help code {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px;
+    padding: 1px 6px; font-size: 12.5px; color: var(--text);
+  }
+  .note { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 9px 0 0; line-height: 1.6; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>DeepSeek 余额</h1>
+    <span class="status" id="status">初始化…</span>
+  </header>
+
+  <div class="banner" id="banner">
+    <span class="dot"></span>
+    <span id="bannerText"></span>
+  </div>
+
+  <section class="card balance" id="balanceCard">
+    <div class="amount dim" id="amount"><span class="cur" id="cur">¥</span><span id="value">--</span></div>
+    <div class="sub" id="sub">尚未获取余额</div>
+  </section>
+
+  <section class="card" id="predCard">
+    <div class="stats">
+      <div class="stat">
+        <div class="k">日均消耗</div>
+        <div class="v dim" id="perDay">—</div>
+      </div>
+      <div class="stat">
+        <div class="k">预计还能用</div>
+        <div class="v dim" id="daysLeft">—</div>
+      </div>
+    </div>
+    <p class="hint" id="predHint">正在积累采样数据…</p>
+  </section>
+
+  <button class="primary hidden" id="installBtn">安装到手机主屏幕</button>
+
+  <div class="row">
+    <button class="primary wide" id="refreshBtn">立即刷新</button>
+    <button class="wide" id="settingsBtn">设置</button>
+  </div>
+
+  <!-- ===== 设置 ===== -->
+  <details id="settings">
+    <summary>设置</summary>
+    <div class="body">
+      <label class="field">
+        <span class="label">DeepSeek API Key</span>
+        <span class="input-row">
+          <input type="password" id="keyInput" placeholder="sk-..." autocomplete="off" spellcheck="false">
+          <button class="btn-sm" id="eyeBtn" type="button">显示</button>
+        </span>
+      </label>
+
+      <label class="field">
+        <span class="label">自动刷新间隔</span>
+        <select id="intervalSel">
+          <option value="1">每 1 分钟</option>
+          <option value="5">每 5 分钟</option>
+          <option value="15">每 15 分钟</option>
+          <option value="30">每 30 分钟</option>
+          <option value="0">关闭自动刷新</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="label">余额告警阈值（元）</span>
+        <input type="number" id="thresholdInput" min="0" step="1" value="10">
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="notifyToggle">
+        <span>低于阈值时发送系统通知</span>
+      </label>
+      <p class="hint" id="notifyHint"></p>
+
+      <div class="row" style="margin-top:16px">
+        <button class="primary wide" id="saveBtn">保存并刷新</button>
+        <button class="wide" id="clearBtn">清除数据</button>
+      </div>
+      <p class="hint">Key 只保存在本机浏览器里，只会发送给 <code>api.deepseek.com</code>，本页面没有任何外部资源或统计脚本。</p>
+    </div>
+  </details>
+
+  <!-- ===== 配置迁移 ===== -->
+  <details id="migrate">
+    <summary>配置迁移（电脑 ⇄ 手机）</summary>
+    <div class="body">
+      <div class="row">
+        <button class="wide" id="exportBtn">导出配置</button>
+        <button class="wide" id="importBtn">导入配置</button>
+      </div>
+      <textarea id="migrateText" placeholder="点「导出配置」生成配置码，或粘贴配置码后点「导入配置」。" spellcheck="false" style="margin-top:12px"></textarea>
+      <p class="hint">配置码包含 API Key 和设置，<b>请勿发给他人</b>。换设备时用它免去重新输入长 Key 的麻烦。</p>
+    </div>
+  </details>
+
+  <!-- ===== 原始响应 ===== -->
+  <details id="rawBox">
+    <summary>原始响应（排查用）</summary>
+    <div class="body"><pre id="raw">还没有请求过。</pre></div>
+  </details>
+
+  <!-- ===== 手机使用说明 ===== -->
+  <details id="help">
+    <summary>在手机上安装使用</summary>
+    <div class="body help">
+      <b>装成 App（推荐）</b>
+      <ol>
+        <li>手机浏览器打开你的托管网址：<code>https://&lt;用户名&gt;.github.io/&lt;仓库名&gt;/deepseek-balance.html</code></li>
+        <li>点页面上出现的「安装到手机主屏幕」按钮（没出现就用 Chrome 菜单 →「安装应用」）</li>
+        <li>以后从主屏幕图标点开，就是全屏独立窗口，跟普通 App 一样</li>
+      </ol>
+      <p class="hint">Key 只需填一次，会记在这台设备上。想在电脑和手机之间同步，用上面的「配置迁移」。</p>
+
+      <div class="note">
+        <b>局域网方式（备用，数据不出内网）</b><br>
+        电脑和手机连同一个 WiFi，双击电脑上的 <code>start-server.bat</code>，手机浏览器打开窗口里打印的网址即可。
+        缺点是离开这个 WiFi 就用不了，而且 HTTP 环境下<b>发不了系统通知、也不会全屏启动</b>，所以不建议在手机上长期这么用。
+      </div>
+
+      <div class="note">
+        <b>关于告警的局限（说实话）</b><br>
+        网页应用<b>完全关闭后无法告警</b>，页面在后台时定时器也会被浏览器节流到几分钟一次。
+        它能做到的是：打开应用时立刻看到最新余额，以及在开着的时候跌破阈值就弹通知。
+        要做到「关着也能收到告警」，得再搭一个常驻服务端，那就不符合你说的「不能过于复杂」了。
+      </div>
+    </div>
+  </details>
+
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const API = 'https://api.deepseek.com/user/balance';
+  const LS = { key: 'dsb.key', cfg: 'dsb.cfg', samples: 'dsb.samples', above: 'dsb.above' };
+  const DAY = 86400000, HOUR = 3600000;
+  const WINDOW_MS = 7 * DAY;      // 预测只回看最近 7 天
+  const MIN_SPAN_MS = 2 * HOUR;   // 至少要跨 2 小时才能算斜率
+  const MAX_SAMPLES = 2000;
+  const DEFAULT_CFG = { interval: 5, threshold: 10, notify: true };
+
+  const $ = id => document.getElementById(id);
+  const el = {
+    status: $('status'), banner: $('banner'), bannerText: $('bannerText'),
+    balanceCard: $('balanceCard'), amount: $('amount'), cur: $('cur'), value: $('value'), sub: $('sub'),
+    perDay: $('perDay'), daysLeft: $('daysLeft'), predHint: $('predHint'),
+    keyInput: $('keyInput'), eyeBtn: $('eyeBtn'), intervalSel: $('intervalSel'),
+    thresholdInput: $('thresholdInput'), notifyToggle: $('notifyToggle'), notifyHint: $('notifyHint'),
+    saveBtn: $('saveBtn'), clearBtn: $('clearBtn'), refreshBtn: $('refreshBtn'), settingsBtn: $('settingsBtn'),
+    installBtn: $('installBtn'),
+    settings: $('settings'), migrateText: $('migrateText'),
+    exportBtn: $('exportBtn'), importBtn: $('importBtn'), raw: $('raw'), rawBox: $('rawBox'),
+  };
+
+  const state = {
+    key: '',
+    cfg: Object.assign({}, DEFAULT_CFG),
+    samples: [],       // [{t: 时间戳, v: 余额}]
+    lastValue: null,   // 最近一次成功获取的余额
+    lastAt: null,      // 最近一次成功获取的时间
+    isAvailable: null, // 接口返回的 is_available
+    below: false,      // 当前是否低于阈值
+    busy: false,       // 请求进行中
+  };
+  let timer = null;
+
+  // ---------- 工具 ----------
+
+  const clampNum = (v, fallback) => {
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    return isFinite(n) ? n : fallback;
+  };
+
+  const fmt = n => n.toFixed(2);
+
+  function b64encode(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  }
+
+  function b64decode(b64) {
+    const bin = atob(b64.replace(/\s+/g, ''));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  function setStatus(text, isErr) {
+    el.status.textContent = text;
+    el.status.classList.toggle('err', !!isErr);
+  }
+
+  // 空闲时标题栏显示刷新节奏；具体「更新于xx」由余额卡片自己展示，避免重复
+  const idleStatus = () =>
+    state.cfg.interval > 0 ? `每 ${state.cfg.interval} 分钟自动刷新` : '自动刷新已关闭';
+
+  function relTime(t) {
+    const s = Math.floor((Date.now() - t) / 1000);
+    if (s < 10) return '刚刚';
+    if (s < 60) return s + ' 秒前';
+    if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
+    if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
+    return Math.floor(s / 86400) + ' 天前';
+  }
+
+  // ---------- 存储 ----------
+
+  function loadState() {
+    state.key = localStorage.getItem(LS.key) || '';
+
+    try {
+      state.cfg = Object.assign({}, DEFAULT_CFG, JSON.parse(localStorage.getItem(LS.cfg) || '{}'));
+    } catch (_) {
+      state.cfg = Object.assign({}, DEFAULT_CFG);
+    }
+    state.cfg.interval = clampNum(state.cfg.interval, DEFAULT_CFG.interval);
+    state.cfg.threshold = clampNum(state.cfg.threshold, DEFAULT_CFG.threshold);
+
+    try {
+      const s = JSON.parse(localStorage.getItem(LS.samples) || '[]');
+      // 过滤掉损坏的样本，并按时间排序
+      state.samples = Array.isArray(s)
+        ? s.filter(p => p && isFinite(p.t) && isFinite(p.v)).sort((a, b) => a.t - b.t)
+        : [];
+    } catch (_) {
+      state.samples = [];
+    }
+
+    // 上次是否处于「低于阈值」状态，避免每次打开页面都重复告警
+    state.below = localStorage.getItem(LS.above) === '0';
+  }
+
+  const saveCfg = () => localStorage.setItem(LS.cfg, JSON.stringify(state.cfg));
+  const saveSamples = () => localStorage.setItem(LS.samples, JSON.stringify(state.samples));
+
+  // ---------- 采样与预测 ----------
+
+  function recordSample(v) {
+    const now = Date.now();
+    const s = state.samples;
+    const last = s[s.length - 1];
+    // 同一自然小时内只保留最后一个采样点，防止 localStorage 膨胀
+    if (last && Math.floor(last.t / HOUR) === Math.floor(now / HOUR)) {
+      s[s.length - 1] = { t: now, v };
+    } else {
+      s.push({ t: now, v });
+    }
+    if (s.length > MAX_SAMPLES) s.splice(0, s.length - MAX_SAMPLES);
+    saveSamples();
+  }
+
+  /**
+   * 估算日均消耗和剩余可用天数。
+   * 用最小二乘线性回归（而非首尾相减），抗单点噪声。
+   * 关键在于充值检测：余额上升会把斜率拉正，不重置窗口的话预测会完全失真。
+   */
+  function predict() {
+    const now = Date.now();
+    const pts = state.samples.filter(p => now - p.t <= WINDOW_MS);
+    if (pts.length < 2) return { ok: false, msg: '正在积累采样数据，至少需要 2 次成功刷新。' };
+
+    // 从后往前找最后一次余额上升的位置，那之后才是纯消耗区间
+    let start = 0;
+    for (let i = pts.length - 1; i > 0; i--) {
+      if (pts[i].v > pts[i - 1].v + 1e-9) { start = i; break; }
+    }
+    const win = pts.slice(start);
+    if (win.length < 2) return { ok: false, msg: '刚检测到充值，正在重新累计数据。' };
+
+    const t0 = win[0].t;
+    const span = win[win.length - 1].t - t0;
+    if (span < MIN_SPAN_MS) {
+      const left = Math.max(1, Math.ceil((MIN_SPAN_MS - span) / 60000));
+      return { ok: false, msg: `正在积累采样数据，还需约 ${left} 分钟。` };
+    }
+
+    const n = win.length;
+    let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (const p of win) {
+      const x = (p.t - t0) / DAY;   // 以「天」为单位，斜率直接就是 元/天
+      sx += x; sy += p.v; sxx += x * x; sxy += x * p.v;
+    }
+    const denom = n * sxx - sx * sx;
+    if (!denom) return { ok: false, msg: '采样时间过于集中，无法估算。' };
+
+    const perDay = -((n * sxy - sx * sy) / denom);
+    const current = win[win.length - 1].v;
+    return {
+      ok: true,
+      perDay,
+      daysLeft: perDay > 0 ? current / perDay : Infinity,
+      count: win.length,
+      spanDays: span / DAY,
+    };
+  }
+
+  function renderPrediction() {
+    const p = predict();
+    if (!p.ok) {
+      el.perDay.textContent = '—';
+      el.daysLeft.textContent = '—';
+      el.perDay.className = 'v dim';
+      el.daysLeft.className = 'v dim';
+      el.predHint.textContent = p.msg;
+      return;
+    }
+
+    const idle = p.perDay <= 0.005;
+    el.perDay.textContent = idle ? '无消耗' : '¥' + fmt(p.perDay);
+    el.perDay.className = 'v' + (idle ? ' dim' : '');
+
+    if (idle) {
+      el.daysLeft.textContent = '—';
+      el.daysLeft.className = 'v dim';
+    } else if (p.daysLeft > 365) {
+      el.daysLeft.textContent = '1 年以上';
+      el.daysLeft.className = 'v ok';
+    } else {
+      const d = Math.floor(p.daysLeft);
+      el.daysLeft.textContent = d + ' 天';
+      el.daysLeft.className = 'v ' + (d <= 7 ? 'warn' : 'ok');
+    }
+
+    el.predHint.textContent =
+      `基于最近 ${p.spanDays < 1 ? p.spanDays.toFixed(1) + ' 天' : Math.round(p.spanDays) + ' 天'}内的 ${p.count} 次采样估算。` +
+      `检测到充值后会自动重新累计。`;
+  }
+
+  // ---------- 告警 ----------
+
+  function syncNotifyHint() {
+    if (!('Notification' in window)) {
+      el.notifyHint.textContent = '当前浏览器不支持系统通知。';
+      return;
+    }
+    if (!window.isSecureContext) {
+      el.notifyHint.textContent = '当前是 HTTP 访问（局域网方式），浏览器不允许发系统通知，只会显示页面内的红色横幅。换成 HTTPS 托管后即可正常通知。';
+      return;
+    }
+    if (Notification.permission === 'granted') {
+      el.notifyHint.textContent = '通知权限已授权。';
+    } else if (Notification.permission === 'denied') {
+      el.notifyHint.textContent = '通知权限被拒绝，需在浏览器设置里手动放开。';
+    } else {
+      el.notifyHint.textContent = '尚未授权，勾选后保存会弹出授权请求。';
+    }
+  }
+
+  async function ensureNotifyPermission() {
+    if (!state.cfg.notify) return;
+    if (!('Notification' in window) || !window.isSecureContext) return;
+    if (Notification.permission === 'default') {
+      try { await Notification.requestPermission(); } catch (_) {}
+    }
+    syncNotifyHint();
+  }
+
+  /**
+   * 发系统通知。安卓 Chrome 不允许直接 new Notification()（会抛 TypeError），
+   * 所以优先走 Service Worker 的 showNotification —— 注册了 SW 之后手机端才真能收到通知。
+   */
+  async function notifySystem(title, body) {
+    if (!state.cfg.notify || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg && typeof reg.showNotification === 'function') {
+          await reg.showNotification(title, {
+            body, tag: 'dsb-low-balance', renotify: true,
+            icon: 'icon-192.png', badge: 'icon-192.png',
+          });
+          return;
+        }
+      }
+    } catch (_) {}
+
+    // 桌面浏览器（以及没有 SW 的情况）走构造器
+    try {
+      new Notification(title, { body, tag: 'dsb-low-balance', icon: 'icon-192.png' });
+    } catch (_) {}
+  }
+
+  function fireAlert(v) {
+    const th = state.cfg.threshold;
+    const msg = `当前余额 ¥${fmt(v)}，已低于阈值 ¥${fmt(th)}`;
+
+    // 页面内提示始终生效，不依赖任何权限
+    el.bannerText.textContent = msg;
+    el.banner.classList.add('on');
+
+    notifySystem('DeepSeek 余额不足', msg);
+    try { if (navigator.vibrate) navigator.vibrate([180, 90, 180]); } catch (_) {}
+  }
+
+  /**
+   * 只在「从阈值以上跌到阈值以下」的那一次告警，
+   * 避免每轮自动刷新都重复轰炸。充值回到阈值以上后重置。
+   */
+  function checkAlert(v) {
+    const th = state.cfg.threshold;
+    const isAbove = v >= th;
+    const prev = localStorage.getItem(LS.above);   // null 表示首次运行
+
+    if (prev === '1' && !isAbove) fireAlert(v);
+    localStorage.setItem(LS.above, isAbove ? '1' : '0');
+
+    state.below = !isAbove;
+    if (isAbove) el.banner.classList.remove('on');
+  }
+
+  // ---------- 渲染 ----------
+
+  function render() {
+    const v = state.lastValue;
+
+    if (v === null) {
+      el.amount.className = 'amount dim';
+      el.value.textContent = '--';
+      el.sub.textContent = state.key ? '尚未获取余额' : '请先在下方设置里填写 API Key';
+    } else {
+      el.amount.className = 'amount';
+      el.value.textContent = fmt(v);
+      el.cur.textContent = '¥';
+      const when = state.lastAt ? relTime(state.lastAt) : '';
+      el.sub.textContent = (state.isAvailable === false ? '余额不足，API 调用可能受限 · ' : '') + '更新于 ' + when;
+    }
+
+    el.balanceCard.classList.toggle('alert', state.below);
+
+    // 标题加警示前缀，放在后台标签页时也能一眼看到
+    const base = 'DeepSeek 余额';
+    document.title = state.below ? '⚠ ' + base : base;
+
+    // 低于阈值时横幅要有内容（首次渲染而非由 checkAlert 触发的情况）
+    if (state.below && v !== null && !el.banner.classList.contains('on')) {
+      el.bannerText.textContent = `当前余额 ¥${fmt(v)}，已低于阈值 ¥${fmt(state.cfg.threshold)}`;
+      el.banner.classList.add('on');
+    }
+
+    renderPrediction();
+  }
+
+  // ---------- 取数 ----------
+
+  /** 从响应里取出人民币余额。字段是字符串、且按币种放在数组里，这里都做防御。 */
+  function parseBalance(json) {
+    const infos = json && json.balance_infos;
+    if (!Array.isArray(infos) || !infos.length) {
+      throw new Error('响应里没有 balance_infos 字段');
+    }
+    const info = infos.find(i => String(i && i.currency).toUpperCase() === 'CNY') || infos[0];
+    const value = parseFloat(info.total_balance);
+    if (!isFinite(value)) {
+      throw new Error('余额字段无法解析为数字：' + JSON.stringify(info.total_balance));
+    }
+    return { value, currency: info.currency || 'CNY', available: json.is_available };
+  }
+
+  async function fetchBalance(opts) {
+    opts = opts || {};
+    if (state.busy) return;
+    if (!state.key) {
+      setStatus('请先填写 API Key');
+      el.settings.open = true;
+      el.keyInput.focus();
+      return;
+    }
+
+    state.busy = true;
+    el.refreshBtn.disabled = true;
+    setStatus('获取中…');
+
+    try {
+      const res = await fetch(API, {
+        method: 'GET',
+        headers: { Authorization: 'Bearer ' + state.key, Accept: 'application/json' },
+        cache: 'no-store',
+      });
+
+      const text = await res.text();
+      el.raw.textContent = `HTTP ${res.status} ${res.statusText}\n\n${text || '(空响应)'}`;
+
+      let json = null;
+      try { json = JSON.parse(text); } catch (_) {}
+
+      if (!res.ok) {
+        const m = json && json.error && json.error.message;
+        throw new Error(m || text.slice(0, 160) || ('HTTP ' + res.status));
+      }
+      if (!json) throw new Error('响应不是合法 JSON');
+
+      const info = parseBalance(json);
+      state.lastValue = info.value;
+      state.lastAt = Date.now();
+      state.isAvailable = info.available;
+      if (info.currency && info.currency !== 'CNY') el.cur.textContent = info.currency + ' ';
+
+      recordSample(info.value);
+      checkAlert(info.value);
+      render();
+      setStatus(idleStatus());
+    } catch (e) {
+      // 区分网络层失败和接口报错，提示更有指向性
+      const netFail = (e instanceof TypeError);
+      setStatus(netFail ? '网络请求失败，请检查网络或代理' : '获取失败：' + e.message, true);
+      if (!opts.silent) el.rawBox.open = true;
+    } finally {
+      state.busy = false;
+      el.refreshBtn.disabled = false;
+    }
+  }
+
+  // ---------- 定时刷新 ----------
+
+  function restartTimer() {
+    if (timer) { clearInterval(timer); timer = null; }
+    const min = state.cfg.interval;
+    if (min > 0) timer = setInterval(() => fetchBalance({ silent: true }), min * 60000);
+    if (!state.busy) setStatus(idleStatus());
+  }
+
+  // ---------- 配置迁移 ----------
+
+  function exportCfg() {
+    const payload = { v: 1, k: state.key, c: state.cfg, s: state.samples };
+    el.migrateText.value = b64encode(JSON.stringify(payload));
+    el.migrateText.select();
+  }
+
+  async function importCfg() {
+    const raw = el.migrateText.value.trim();
+    if (!raw) { setStatus('请先粘贴配置码', true); return; }
+
+    let data;
+    try {
+      data = JSON.parse(b64decode(raw));
+    } catch (_) {
+      setStatus('配置码无法解析，请确认复制完整', true);
+      return;
+    }
+    if (!data || typeof data !== 'object') { setStatus('配置码内容不正确', true); return; }
+
+    if (typeof data.k === 'string') {
+      state.key = data.k;
+      localStorage.setItem(LS.key, state.key);
+      el.keyInput.value = state.key;
+    }
+    if (data.c && typeof data.c === 'object') {
+      state.cfg = Object.assign({}, DEFAULT_CFG, data.c);
+      state.cfg.interval = clampNum(state.cfg.interval, DEFAULT_CFG.interval);
+      state.cfg.threshold = clampNum(state.cfg.threshold, DEFAULT_CFG.threshold);
+      saveCfg();
+      syncInputs();
+      restartTimer();
+    }
+    if (Array.isArray(data.s)) {
+      state.samples = data.s
+        .filter(p => p && isFinite(p.t) && isFinite(p.v))
+        .sort((a, b) => a.t - b.t);
+      if (state.samples.length > MAX_SAMPLES) {
+        state.samples.splice(0, state.samples.length - MAX_SAMPLES);
+      }
+      saveSamples();
+    }
+
+    el.migrateText.value = '';
+    syncNotifyHint();
+    render();
+    setStatus('配置已导入');
+    if (state.key) fetchBalance();
+  }
+
+  // ---------- 表单 ----------
+
+  function syncInputs() {
+    el.intervalSel.value = String(state.cfg.interval);
+    el.thresholdInput.value = String(state.cfg.threshold);
+    el.notifyToggle.checked = !!state.cfg.notify;
+  }
+
+  function applySettings() {
+    state.key = el.keyInput.value.trim();
+    localStorage.setItem(LS.key, state.key);
+
+    state.cfg.interval = clampNum(el.intervalSel.value, DEFAULT_CFG.interval);
+    state.cfg.threshold = clampNum(el.thresholdInput.value, DEFAULT_CFG.threshold);
+    state.cfg.notify = el.notifyToggle.checked;
+    if (state.cfg.threshold < 0) state.cfg.threshold = 0;
+    saveCfg();
+
+    syncInputs();
+    ensureNotifyPermission();
+    restartTimer();
+    render();          // 阈值改了，视觉状态要跟着变（但不在这里触发通知）
+    if (state.key) fetchBalance({ silent: true });
+  }
+
+  // ---------- 事件绑定 ----------
+
+  el.refreshBtn.addEventListener('click', () => fetchBalance());
+  el.saveBtn.addEventListener('click', applySettings);
+  el.settingsBtn.addEventListener('click', () => {
+    el.settings.open = true;
+    el.settings.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  el.eyeBtn.addEventListener('click', () => {
+    const show = el.keyInput.type === 'password';
+    el.keyInput.type = show ? 'text' : 'password';
+    el.eyeBtn.textContent = show ? '隐藏' : '显示';
+  });
+
+  el.exportBtn.addEventListener('click', exportCfg);
+  el.importBtn.addEventListener('click', importCfg);
+
+  el.clearBtn.addEventListener('click', () => {
+    if (!confirm('将清除本机保存的 API Key、设置和全部采样历史，确定吗？')) return;
+    Object.values(LS).forEach(k => localStorage.removeItem(k));
+    state.key = '';
+    state.samples = [];
+    state.lastValue = null;
+    state.lastAt = null;
+    state.below = false;
+    state.cfg = Object.assign({}, DEFAULT_CFG);
+    el.keyInput.value = '';
+    el.migrateText.value = '';
+    el.raw.textContent = '还没有请求过。';
+    syncInputs();
+    restartTimer();
+    render();
+    setStatus('已清除');
+  });
+
+  // 阈值改动即时保存；否则用户改完忘了点保存会有落差
+  el.thresholdInput.addEventListener('change', () => {
+    state.cfg.threshold = Math.max(0, clampNum(el.thresholdInput.value, DEFAULT_CFG.threshold));
+    saveCfg();
+    render();
+  });
+
+  // 页面重新可见时立刻刷新一次（手机锁屏解锁回来时尤其有用）
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.key && !state.busy) fetchBalance({ silent: true });
+  });
+
+  // 每分钟刷新一次「x 分钟前」这类相对时间
+  setInterval(() => { if (state.lastAt && !state.busy) render(); }, 60000);
+
+  // ---------- PWA：安装到主屏幕 + Service Worker ----------
+
+  let installPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    // 已经是独立窗口（装过了）就不再提示
+    if (!window.matchMedia('(display-mode: standalone)').matches) {
+      el.installBtn.classList.remove('hidden');
+    }
+  });
+
+  el.installBtn.addEventListener('click', async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    try { await installPrompt.userChoice; } catch (_) {}
+    installPrompt = null;
+    el.installBtn.classList.add('hidden');
+  });
+
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    el.installBtn.classList.add('hidden');
+  }
+
+  // file:// 下注册会失败，静默忽略即可
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+
+  // ---------- 启动 ----------
+
+  loadState();
+  syncInputs();
+  syncNotifyHint();
+  el.keyInput.value = state.key;
+  render();
+  restartTimer();
+
+  if (state.key) {
+    fetchBalance({ silent: true });
+  } else {
+    setStatus('请先填写 API Key');
+    el.settings.open = true;
+  }
+})();
+</script>
+</body>
+</html>
