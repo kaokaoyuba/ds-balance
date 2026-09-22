@@ -1118,6 +1118,25 @@
     });
   }
 
+  // ---------- 供安卓壳调用 ----------
+
+  /**
+   * 接收原生侧合并后的采样点并重绘。
+   * 安卓小组件在后台每 30 分钟也会采一个点，比网页自己采的还密；
+   * 原生把两边的采样合并后推回来，于是网页和小组件算出来的是同一个数。
+   */
+  window.__dsbApplySamples = function (json) {
+    try {
+      const arr = JSON.parse(json);
+      if (!Array.isArray(arr)) return;
+      const clean = arr.filter(p => p && num(p.t) && num(p.v)).sort((a, b) => a.t - b.t);
+      if (!clean.length) return;
+      state.samples = clean.length > MAX_SAMPLES ? clean.slice(-MAX_SAMPLES) : clean;
+      saveSamples();
+      render();
+    } catch (_) {}
+  };
+
   // ---------- 启动 ----------
 
   loadState();

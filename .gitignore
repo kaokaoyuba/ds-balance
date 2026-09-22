@@ -11,3 +11,5 @@
 !icon-512.png
 !apple-touch-icon.png
 !.nojekyll
+# 安卓应用包（自用，方便手机直接下载安装）
+!ds-balance.apk
