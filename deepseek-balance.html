@@ -1217,7 +1217,10 @@
   async function checkUpdates() {
     let data;
     try {
-      const res = await fetch('versions.json', { cache: 'no-store' });
+      // 带时间戳：旧版 Service Worker 会缓存这个文件，而 SW 是在 HTTP 缓存
+      // 之前拦截请求的，光靠 cache:'no-store' 绕不过去。加了参数之后，
+      // 即使设备上还挂着旧 SW，第一次打开也能拿到最新的版本清单。
+      const res = await fetch('versions.json?t=' + Date.now(), { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       data = await res.json();
     } catch (e) {

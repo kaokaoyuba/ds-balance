@@ -1,14 +1,21 @@
 // Service Worker：让应用可安装、能离线打开，并提供系统通知通道。
 // 只接管本站资源；发往 api.deepseek.com 的请求原样放行，不缓存、不拦截。
 
-const CACHE = 'dsb-v8';
-const ASSETS = [
-  './deepseek-balance.html',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
-  './apple-touch-icon.png',
-];
+const CACHE = 'dsb-v9';
+
+// 只有这几个静态资源进缓存。其余的一律直接交给网络——
+// 这一点很关键：版本清单和安装包必须每次都取新的，一旦被缓存住，
+// 上传新版本后用户永远看不到更新提示，点下载还可能拿到旧安装包。
+// 之前这里是「除导航外全部缓存优先」，就是那个 bug 的来源。
+const CACHEABLE = new Set([
+  'deepseek-balance.html',
+  'manifest.json',
+  'icon-192.png',
+  'icon-512.png',
+  'apple-touch-icon.png',
+]);
+
+const ASSETS = [...CACHEABLE].map((n) => './' + n);
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
@@ -53,7 +60,11 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // 其余静态资源用「缓存优先」
+  // 白名单之外的（版本清单、APK 等）不拦截也不缓存，原样走网络。
+  // 返回而不调用 respondWith，浏览器就按它自己的方式处理这个请求。
+  const name = url.pathname.substring(url.pathname.lastIndexOf('/') + 1);
+  if (!CACHEABLE.has(name)) return;
+
   e.respondWith(
     caches.match(req).then((hit) => {
       if (hit) return hit;
