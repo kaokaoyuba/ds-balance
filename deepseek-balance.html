@@ -1231,9 +1231,13 @@
 
     if (!cur) {
       // 在浏览器里打开，不是应用内
-      el.appVer.textContent = '未在应用内打开';
+      el.appVer.textContent = '读不到版本号';
       el.appVer.className = 'ver-tag';
-      el.appNote.textContent = '你现在是在浏览器里看这个页面。装成安卓应用后，这里会显示你装的是哪一版、要不要更新。';
+      // 两种情况都会走到这里：真的在浏览器里，或者装的是 1.1 及以前的老版本
+      // （它们还不会上报版本号）。两种都说明白，别让人猜。
+      el.appNote.textContent = '在浏览器里打开时这是正常的。如果你是在应用里看到这句，' +
+        '说明你装的版本较旧（1.1 及以前不上报版本号），装一次最新版之后，' +
+        '这里就会显示你装的是哪一版、要不要更新。';
     } else if (cmpVer(cur, latest) < 0) {
       el.appVer.textContent = cur + ' → ' + latest;
       el.appVer.className = 'ver-tag new';
