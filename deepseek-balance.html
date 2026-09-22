@@ -320,6 +320,13 @@
           <span class="ver-tag" id="webVer">—</span>
         </div>
         <p class="hint" id="webNote">每次打开都会自动取最新代码，不需要手动更新。</p>
+        <!--
+          在安卓应用里点这个链接会被壳接管、改用外部浏览器打开。
+          这是唯一能进到「浏览器那套存储」的入口——应用内的 WebView 是独立存储，
+          网页版里的历史只能从浏览器里导出。
+          ?browser=1 只是给壳做标记用。
+        -->
+        <a class="dl" id="webOpen" href="./deepseek-balance.html?browser=1">在浏览器里打开网页版</a>
       </div>
 
       <div class="ver-row">
