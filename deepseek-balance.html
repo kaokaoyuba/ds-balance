@@ -153,6 +153,35 @@
     background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px;
     padding: 1px 6px; font-size: 12.5px; color: var(--text);
   }
+  /* ---- 版本与更新 ---- */
+  .ver-row { margin-top: 16px; }
+  .ver-row:first-child { margin-top: 0; }
+  .ver-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .ver-name { font-size: 14px; font-weight: 600; }
+  .ver-tag {
+    font-size: 11.5px; padding: 1px 8px; border-radius: 20px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+  }
+  .ver-tag.ok { color: var(--ok); border-color: #24503c; }
+  .ver-tag.new { color: #ffd479; border-color: #5a4a1f; }
+  .rel {
+    margin-top: 10px; padding: 12px 13px; border-radius: 10px;
+    background: var(--panel-2); border: 1px solid var(--line);
+  }
+  .rel.cur { border-color: var(--accent); }
+  .rel-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; font-size: 13px; }
+  .rel-head b { font-size: 14px; }
+  .rel-head .date { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+  .rel ul { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
+  .rel ul li { margin-bottom: 3px; }
+  a.dl {
+    display: inline-block; margin-top: 11px; font-size: 12.5px;
+    color: var(--accent); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 7px; padding: 6px 13px;
+  }
+  a.dl:hover { border-color: var(--accent); }
+  .rel .installed { display: inline-block; margin-top: 11px; font-size: 12.5px; color: var(--ok); }
+
   /* ---- 安装卡片 ---- */
   .install-head { font-size: 15px; font-weight: 600; margin-bottom: 9px; }
   #installBtn { width: 100%; margin-top: 13px; }
@@ -269,6 +298,31 @@
     </div>
   </details>
 
+  <!-- ===== 版本与更新 ===== -->
+  <details id="versions">
+    <summary id="verSummary">版本与更新</summary>
+    <div class="body">
+      <div class="ver-row">
+        <div class="ver-head">
+          <span class="ver-name">网页版</span>
+          <span class="ver-tag" id="webVer">—</span>
+        </div>
+        <p class="hint" id="webNote">每次打开都会自动取最新代码，不需要手动更新。</p>
+      </div>
+
+      <div class="ver-row">
+        <div class="ver-head">
+          <span class="ver-name">安卓应用</span>
+          <span class="ver-tag" id="appVer">—</span>
+        </div>
+        <p class="hint" id="appNote"></p>
+      </div>
+
+      <div id="relList"></div>
+      <p class="hint" id="verFoot"></p>
+    </div>
+  </details>
+
   <!-- ===== 原始响应 ===== -->
   <details id="rawBox">
     <summary>原始响应（排查用）</summary>
@@ -326,6 +380,8 @@
     thresholdInput: $('thresholdInput'), notifyToggle: $('notifyToggle'), notifyHint: $('notifyHint'),
     saveBtn: $('saveBtn'), clearBtn: $('clearBtn'), refreshBtn: $('refreshBtn'), settingsBtn: $('settingsBtn'),
     installBtn: $('installBtn'), installCard: $('installCard'), installHint: $('installHint'),
+    webVer: $('webVer'), webNote: $('webNote'), appVer: $('appVer'), appNote: $('appNote'),
+    relList: $('relList'), verFoot: $('verFoot'), verSummary: $('verSummary'),
     settings: $('settings'), migrateText: $('migrateText'), migrateMsg: $('migrateMsg'),
     exportBtn: $('exportBtn'), importBtn: $('importBtn'), raw: $('raw'), rawBox: $('rawBox'),
   };
@@ -1118,6 +1174,130 @@
     });
   }
 
+  // ---------- 版本与更新 ----------
+
+  // 网页这份代码的构建日期。改了网页就顺手改这里。
+  const WEB_BUILD = '2026-09-22';
+
+  /** 安卓应用把自己的版本号放在网址上带进来（?appv=1.2）；在浏览器里打开时没有这个参数 */
+  function runningAppVersion() {
+    try { return new URLSearchParams(location.search).get('appv') || ''; } catch (_) { return ''; }
+  }
+
+  /** 比较 "1.10" 和 "1.9" 这类版本号，不能当小数比 */
+  function cmpVer(a, b) {
+    const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
+    const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] || 0) - (pb[i] || 0);
+      if (d) return d > 0 ? 1 : -1;
+    }
+    return 0;
+  }
+
+  function tagNode(text, cls) {
+    const s = document.createElement('span');
+    s.className = 'ver-tag' + (cls ? ' ' + cls : '');
+    s.textContent = text;
+    return s;
+  }
+
+  async function checkUpdates() {
+    let data;
+    try {
+      const res = await fetch('versions.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      data = await res.json();
+    } catch (e) {
+      el.webVer.textContent = '检查失败';
+      el.webVer.className = 'ver-tag';
+      el.webNote.textContent = '没能取到版本清单（' + e.message + '）。联网后会再试。';
+      el.relList.textContent = '';
+      return;
+    }
+    renderVersions(data);
+  }
+
+  function renderVersions(data) {
+    el.webVer.textContent = (data.web && data.web.build) || '未知';
+    el.webVer.className = 'ver-tag ok';
+    el.webNote.textContent = (data.web && data.web.note) ||
+      '每次打开都会自动取最新代码，不需要手动更新。';
+
+    const and = data.android || {};
+    const rels = Array.isArray(and.releases) ? and.releases : [];
+    const latest = and.latest || (rels[0] && rels[0].version) || '';
+    const cur = runningAppVersion();
+
+    if (!cur) {
+      // 在浏览器里打开，不是应用内
+      el.appVer.textContent = '未在应用内打开';
+      el.appVer.className = 'ver-tag';
+      el.appNote.textContent = '你现在是在浏览器里看这个页面。装成安卓应用后，这里会显示你装的是哪一版、要不要更新。';
+    } else if (cmpVer(cur, latest) < 0) {
+      el.appVer.textContent = cur + ' → ' + latest;
+      el.appVer.className = 'ver-tag new';
+      el.appNote.textContent = '有新版本。下面标「推荐」的那个就是。覆盖安装不会丢数据。';
+      el.verSummary.textContent = '版本与更新 · 有新版本';
+    } else {
+      el.appVer.textContent = cur;
+      el.appVer.className = 'ver-tag ok';
+      el.appNote.textContent = cmpVer(cur, latest) === 0
+        ? '已是最新版本。'
+        : '你装的版本比发布版还新，可能是自己编译的。';
+    }
+
+    // 用 createElement 而不是拼 innerHTML：清单是外部文件，
+    // 即使它被改坏了也不该变成能注入页面的东西
+    el.relList.textContent = '';
+    rels.forEach(r => {
+      const isCur = !!cur && cmpVer(cur, r.version) === 0;
+      const box = document.createElement('div');
+      box.className = 'rel' + (isCur ? ' cur' : '');
+
+      const head = document.createElement('div');
+      head.className = 'rel-head';
+      const name = document.createElement('b');
+      name.textContent = 'v' + r.version;
+      head.appendChild(name);
+      if (r.version === latest) head.appendChild(tagNode('最新', 'ok'));
+      if (isCur) head.appendChild(tagNode('你装的', 'ok'));
+      const date = document.createElement('span');
+      date.className = 'date';
+      date.textContent = r.date || '';
+      head.appendChild(date);
+      box.appendChild(head);
+
+      if (Array.isArray(r.notes) && r.notes.length) {
+        const ul = document.createElement('ul');
+        r.notes.forEach(n => {
+          const li = document.createElement('li');
+          li.textContent = String(n);
+          ul.appendChild(li);
+        });
+        box.appendChild(ul);
+      }
+
+      if (isCur) {
+        const s = document.createElement('span');
+        s.className = 'installed';
+        s.textContent = '已安装';
+        box.appendChild(s);
+      } else if (r.file) {
+        const a = document.createElement('a');
+        a.className = 'dl';
+        a.href = r.file;
+        a.textContent = '下载 v' + r.version + (r.version === latest ? '（推荐）' : '');
+        box.appendChild(a);
+      }
+      el.relList.appendChild(box);
+    });
+
+    el.verFoot.textContent = rels.length
+      ? '覆盖安装即可升级，应用内的 Key 和采样历史都会保留。想退回旧版本，装对应那个就行。'
+      : '';
+  }
+
   // ---------- 供安卓壳调用 ----------
 
   /**
@@ -1145,6 +1325,7 @@
   el.keyInput.value = state.key;
   render();
   restartTimer();
+  checkUpdates();     // 异步，不阻塞首屏
 
   if (state.key) {
     fetchBalance({ silent: true });
