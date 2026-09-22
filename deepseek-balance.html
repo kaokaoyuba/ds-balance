@@ -308,7 +308,7 @@
   const LS = { key: 'dsb.key', cfg: 'dsb.cfg', samples: 'dsb.samples', above: 'dsb.above', last: 'dsb.last' };
   const DAY = 86400000, HOUR = 3600000;
   const WINDOW_MS = 7 * DAY;      // 预测只回看最近 7 天
-  const MIN_SPAN_MS = 2 * HOUR;   // 至少要跨 2 小时才能算斜率
+  const MIN_SPAN_MS = 2 * HOUR;   // 至少要跨 2 小时，否则算出来的速度没意义
   const MAX_SAMPLES = 2000;
   const DEFAULT_CFG = { interval: 5, threshold: 10, notify: true };
 
@@ -483,45 +483,45 @@
 
   /**
    * 估算日均消耗和剩余可用天数。
-   * 用最小二乘线性回归（而非首尾相减），抗单点噪声。
-   * 关键在于充值检测：余额上升会把斜率拉正，不重置窗口的话预测会完全失真。
+   *
+   * 算法：窗口内「总共花掉多少 ÷ 总共过了多久」，逐段累加余额的下降量、
+   * 忽略上升量。不是拿余额直接做线性回归。
+   *
+   * 为什么不用回归：充值会让余额向上跳变，回归会被这个跳变拉歪——实测
+   * 100→95→90→85→200→195→190 这组数据，回归斜率是 +24.57/天，也就是
+   * 「余额在涨」，程序会据此显示「无消耗」，完全反了。
+   *
+   * 为什么不因为充值就把历史丢掉重来：充值并不改变消耗速度，
+   * 把之前的采样作废既浪费数据，又会留下一段「正在重新累计」的空白，
+   * 明明有足够信息却给不出估算。忽略上升量即可，跳变自然不参与计算。
+   *
+   * 附带好处：跨采样空档也算得对——你没打开应用的那几天，
+   * API 消耗照样在发生，余额的下降是真实的，时间跨度也照实计入。
    */
   function predict() {
     const now = Date.now();
     const pts = state.samples.filter(p => now - p.t <= WINDOW_MS);
     if (pts.length < 2) return { ok: false, msg: '正在积累采样数据，至少需要 2 次成功刷新。' };
 
-    // 从后往前找最后一次余额上升的位置，那之后才是纯消耗区间
-    let start = 0;
-    for (let i = pts.length - 1; i > 0; i--) {
-      if (pts[i].v > pts[i - 1].v + 1e-9) { start = i; break; }
-    }
-    const win = pts.slice(start);
-    if (win.length < 2) return { ok: false, msg: '刚检测到充值，正在重新累计数据。' };
-
-    const t0 = win[0].t;
-    const span = win[win.length - 1].t - t0;
+    const span = pts[pts.length - 1].t - pts[0].t;
     if (span < MIN_SPAN_MS) {
       const left = Math.max(1, Math.ceil((MIN_SPAN_MS - span) / 60000));
       return { ok: false, msg: `正在积累采样数据，还需约 ${left} 分钟。` };
     }
 
-    const n = win.length;
-    let sx = 0, sy = 0, sxx = 0, sxy = 0;
-    for (const p of win) {
-      const x = (p.t - t0) / DAY;   // 以「天」为单位，斜率直接就是 元/天
-      sx += x; sy += p.v; sxx += x * x; sxy += x * p.v;
+    let spent = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const drop = pts[i - 1].v - pts[i].v;
+      if (drop > 0) spent += drop;   // 上升是充值，不计入消耗
     }
-    const denom = n * sxx - sx * sx;
-    if (!denom) return { ok: false, msg: '采样时间过于集中，无法估算。' };
 
-    const perDay = -((n * sxy - sx * sy) / denom);
-    const current = win[win.length - 1].v;
+    const perDay = spent / (span / DAY);
+    const current = pts[pts.length - 1].v;
     return {
       ok: true,
       perDay,
       daysLeft: perDay > 0 ? current / perDay : Infinity,
-      count: win.length,
+      count: pts.length,
       spanDays: span / DAY,
     };
   }
@@ -559,7 +559,7 @@
       ? `按当前速度，大约 ${formatDate(Date.now() + p.daysLeft * DAY)}用完。`
       : '';
     el.predHint.textContent =
-      eta + `基于最近 ${spanTxt}内的 ${p.count} 次采样估算，检测到充值后会自动重新累计。`;
+      eta + `基于最近 ${spanTxt}内的 ${p.count} 次采样估算，充值不计入消耗。`;
   }
 
   /**
