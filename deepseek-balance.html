@@ -67,11 +67,11 @@
 
   /* ---- 预测 ---- */
   .stats { display: flex; gap: 1px; background: var(--line); border-radius: 12px; overflow: hidden; margin-top: 4px; }
-  .stat { flex: 1; background: var(--panel-2); padding: 14px 12px; text-align: center; }
+  .stat { flex: 1; min-width: 0; background: var(--panel-2); padding: 14px 6px; text-align: center; }
   .stat .k { font-size: 12px; color: var(--muted); }
   .stat .v {
-    margin-top: 5px; font-size: 19px; font-weight: 600;
-    font-variant-numeric: tabular-nums;
+    margin-top: 5px; font-size: 18px; font-weight: 600;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
   }
   .stat .v.ok { color: var(--ok); }
   .stat .v.warn { color: var(--warn); }
@@ -184,6 +184,10 @@
 
   <section class="card" id="predCard">
     <div class="stats">
+      <div class="stat">
+        <div class="k">今日消耗</div>
+        <div class="v dim" id="today">—</div>
+      </div>
       <div class="stat">
         <div class="k">日均消耗</div>
         <div class="v dim" id="perDay">—</div>
@@ -316,7 +320,8 @@
   const el = {
     status: $('status'), banner: $('banner'), bannerText: $('bannerText'),
     balanceCard: $('balanceCard'), amount: $('amount'), cur: $('cur'), value: $('value'), sub: $('sub'),
-    perDay: $('perDay'), daysLeft: $('daysLeft'), predHint: $('predHint'), spark: $('spark'),
+    perDay: $('perDay'), daysLeft: $('daysLeft'), today: $('today'),
+    predHint: $('predHint'), spark: $('spark'),
     keyInput: $('keyInput'), eyeBtn: $('eyeBtn'), intervalSel: $('intervalSel'),
     thresholdInput: $('thresholdInput'), notifyToggle: $('notifyToggle'), notifyHint: $('notifyHint'),
     saveBtn: $('saveBtn'), clearBtn: $('clearBtn'), refreshBtn: $('refreshBtn'), settingsBtn: $('settingsBtn'),
@@ -526,6 +531,63 @@
     };
   }
 
+  /**
+   * 今日消耗：从基线采样点算到最新采样点，逐段累加余额的下降量（忽略上升）。
+   *
+   * 基线取最接近零点的采样点：优先零点之前的最后一个（最多回溯 12 小时），
+   * 其次零点之后不久的第一个（最多 1 小时）。两者都没有，说明这段时间根本没
+   * 开过应用，今天早些时候烧了多少无从得知——返回 null，不编一个数糊弄。
+   *
+   * 采样点很少正好落在零点，所以跨零点的那个间隔按时间比例折算，
+   * 只把零点之后的部分算进今天，否则会把昨晚的花费算到今日头上。
+   */
+  function todaySpend() {
+    const pts = state.samples;
+    if (!pts.length) return null;
+
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    const midnight = d.getTime();
+
+    if (pts[pts.length - 1].t < midnight) return null;   // 今天还没采样
+
+    let base = -1;
+    for (let i = pts.length - 1; i >= 0; i--) {
+      if (pts[i].t < midnight) { base = i; break; }
+    }
+    if (base >= 0 && midnight - pts[base].t > 12 * HOUR) base = -1;
+
+    if (base < 0) {
+      const first = pts.findIndex(p => p.t >= midnight);
+      if (first < 0 || pts[first].t - midnight > HOUR) return null;
+      base = first;
+    }
+
+    let spent = 0;
+    for (let i = base + 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const drop = a.v - b.v;
+      if (drop <= 0) continue;                                  // 上升是充值，不计入
+      if (b.t <= midnight) continue;                            // 整段都在今天之前
+      spent += a.t >= midnight
+        ? drop
+        : drop * (b.t - midnight) / (b.t - a.t);                // 跨零点，按比例折算
+    }
+    return { spent };
+  }
+
+  function renderToday() {
+    const t = todaySpend();
+    if (!t) {
+      el.today.textContent = '—';
+      el.today.className = 'v dim';
+      return;
+    }
+    const none = t.spent <= 0.005;
+    el.today.textContent = sym(t.spent);
+    el.today.className = 'v' + (none ? ' dim' : '');
+  }
+
   function renderPrediction() {
     const p = predict();
     if (!p.ok) {
@@ -732,6 +794,7 @@
       el.banner.classList.remove('on');
     }
 
+    renderToday();
     renderPrediction();
     renderSpark();
   }
