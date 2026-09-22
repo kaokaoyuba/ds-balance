@@ -164,23 +164,35 @@
   }
   .ver-tag.ok { color: var(--ok); border-color: #24503c; }
   .ver-tag.new { color: #ffd479; border-color: #5a4a1f; }
-  .rel {
-    margin-top: 10px; padding: 12px 13px; border-radius: 10px;
-    background: var(--panel-2); border: 1px solid var(--line);
+  /* 收起时只有版本号 + 一句话简介，点开才展开详情和下载 */
+  details.rel {
+    margin-top: 9px; border-radius: 10px; overflow: hidden;
+    background: var(--panel-2); box-shadow: 0 0 0 1px var(--line);
   }
-  .rel.cur { border-color: var(--accent); }
-  .rel-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; font-size: 13px; }
-  .rel-head b { font-size: 14px; }
-  .rel-head .date { margin-left: auto; font-size: 11.5px; color: var(--muted); }
-  .rel ul { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
-  .rel ul li { margin-bottom: 3px; }
+  details.rel.cur { box-shadow: 0 0 0 1px var(--accent); }
+  details.rel > summary.rel-sum {
+    padding: 11px 13px; font-size: 13px; color: var(--text); cursor: pointer;
+  }
+  details.rel > summary.rel-sum > b { font-size: 13.5px; margin-right: 7px; }
+  details.rel > summary.rel-sum::after {
+    content: "▸"; float: right; color: var(--muted); font-size: 11px;
+  }
+  details.rel[open] > summary.rel-sum::after { content: "▾"; transform: none; }
+  .rel-brief {
+    display: block; clear: both; margin-top: 3px;
+    font-size: 12.5px; color: var(--muted);
+  }
+  .rel-body { padding: 0 13px 13px; }
+  .rel-body ul { margin: 0; padding-left: 17px; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
+  .rel-body ul li { margin-bottom: 3px; }
+  .rel-date { display: block; margin-top: 9px; font-size: 11.5px; color: var(--muted); }
   a.dl {
-    display: inline-block; margin-top: 11px; font-size: 12.5px;
+    display: inline-block; margin-top: 10px; font-size: 12.5px;
     color: var(--accent); text-decoration: none;
     border: 1px solid var(--line); border-radius: 7px; padding: 6px 13px;
   }
   a.dl:hover { border-color: var(--accent); }
-  .rel .installed { display: inline-block; margin-top: 11px; font-size: 12.5px; color: var(--ok); }
+  .rel-body .installed { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--ok); }
 
   /* ---- 安装卡片 ---- */
   .install-head { font-size: 15px; font-weight: 600; margin-bottom: 9px; }
@@ -1256,22 +1268,27 @@
     el.relList.textContent = '';
     rels.forEach(r => {
       const isCur = !!cur && cmpVer(cur, r.version) === 0;
-      const box = document.createElement('div');
-      box.className = 'rel' + (isCur ? ' cur' : '');
 
-      const head = document.createElement('div');
-      head.className = 'rel-head';
+      // 收起时只显示版本号 + 一句话简介；点开才展开详细说明和下载
+      const row = document.createElement('details');
+      row.className = 'rel' + (isCur ? ' cur' : '');
+
+      const sum = document.createElement('summary');
+      sum.className = 'rel-sum';
       const name = document.createElement('b');
       name.textContent = 'v' + r.version;
-      head.appendChild(name);
-      if (r.version === latest) head.appendChild(tagNode('最新', 'ok'));
-      if (isCur) head.appendChild(tagNode('你装的', 'ok'));
-      const date = document.createElement('span');
-      date.className = 'date';
-      date.textContent = r.date || '';
-      head.appendChild(date);
-      box.appendChild(head);
+      sum.appendChild(name);
+      if (r.version === latest) sum.appendChild(tagNode('最新', 'ok'));
+      if (isCur) sum.appendChild(tagNode('你装的', 'ok'));
+      const brief = document.createElement('span');
+      brief.className = 'rel-brief';
+      // 没写 brief 就退回第一条说明，总比空着强
+      brief.textContent = r.brief || (Array.isArray(r.notes) && r.notes[0]) || '';
+      sum.appendChild(brief);
+      row.appendChild(sum);
 
+      const body = document.createElement('div');
+      body.className = 'rel-body';
       if (Array.isArray(r.notes) && r.notes.length) {
         const ul = document.createElement('ul');
         r.notes.forEach(n => {
@@ -1279,22 +1296,29 @@
           li.textContent = String(n);
           ul.appendChild(li);
         });
-        box.appendChild(ul);
+        body.appendChild(ul);
       }
-
+      if (r.date) {
+        const d = document.createElement('span');
+        d.className = 'rel-date';
+        d.textContent = r.date;
+        body.appendChild(d);
+      }
       if (isCur) {
         const s = document.createElement('span');
         s.className = 'installed';
         s.textContent = '已安装';
-        box.appendChild(s);
+        body.appendChild(s);
       } else if (r.file) {
         const a = document.createElement('a');
         a.className = 'dl';
         a.href = r.file;
         a.textContent = '下载 v' + r.version + (r.version === latest ? '（推荐）' : '');
-        box.appendChild(a);
+        body.appendChild(a);
       }
-      el.relList.appendChild(box);
+      row.appendChild(body);
+
+      el.relList.appendChild(row);
     });
 
     el.verFoot.textContent = rels.length
