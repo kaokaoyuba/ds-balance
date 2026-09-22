@@ -378,7 +378,11 @@
   const LS = { key: 'dsb.key', cfg: 'dsb.cfg', samples: 'dsb.samples', above: 'dsb.above', last: 'dsb.last' };
   const DAY = 86400000, HOUR = 3600000;
   const WINDOW_MS = 7 * DAY;      // 预测只回看最近 7 天
-  const MIN_SPAN_MS = 2 * HOUR;   // 至少要跨 2 小时，否则算出来的速度没意义
+  // 估算「日均消耗」至少要看半天。
+  // 定成 2 小时是错的：2 小时花掉 1 元就会被外推成「日均 12 元」，
+  // 余额 12 元就报「还能用 0 天」——从极短窗口外推一天在统计上没有意义，
+  // 只会给出吓人的错数字。宁可说「数据还在积累」。
+  const MIN_SPAN_MS = 12 * HOUR;
   const MAX_SAMPLES = 2000;
   const DEFAULT_CFG = { interval: 5, threshold: 10, notify: true };
 
@@ -578,8 +582,11 @@
 
     const span = pts[pts.length - 1].t - pts[0].t;
     if (span < MIN_SPAN_MS) {
-      const left = Math.max(1, Math.ceil((MIN_SPAN_MS - span) / 60000));
-      return { ok: false, msg: `正在积累采样数据，还需约 ${left} 分钟。` };
+      const leftMs = MIN_SPAN_MS - span;
+      const left = leftMs >= HOUR
+        ? Math.ceil(leftMs / HOUR) + ' 小时'
+        : Math.max(1, Math.ceil(leftMs / 60000)) + ' 分钟';
+      return { ok: false, msg: `正在积累采样数据，还需约 ${left}。` };
     }
 
     let spent = 0;
