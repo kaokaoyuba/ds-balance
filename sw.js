@@ -1,7 +1,7 @@
 // Service Worker：让应用可安装、能离线打开，并提供系统通知通道。
 // 只接管本站资源；发往 api.deepseek.com 的请求原样放行，不缓存、不拦截。
 
-const CACHE = 'dsb-v10';
+const CACHE = 'dsb-v11';
 
 // 只有这几个静态资源进缓存。其余的一律直接交给网络——
 // 这一点很关键：版本清单和安装包必须每次都取新的，一旦被缓存住，
@@ -12,6 +12,7 @@ const ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
 ];
 // 用「相对作用域的路径」而不是文件名来匹配，因为图标在 icons/ 子目录下
