@@ -413,6 +413,7 @@
     curLabel: '¥',     // 币种符号，随余额一起缓存
     failed: false,     // 最近一次刷新是否失败（失败则已有数字不可信）
     busy: false,       // 请求进行中
+    pending: false,    // 请求在飞时又被要求刷新，结束后补一发
     gen: 0,            // 递增代号：清除数据后，让还在飞的请求作废
   };
   let timer = null;
@@ -807,7 +808,7 @@
 
   function fireAlert(v) {
     const th = state.cfg.threshold;
-    const msg = `当前余额 ¥${fmt(v)}，已低于阈值 ¥${fmt(th)}`;
+    const msg = `当前余额 ${sym(v)}，已低于阈值 ${sym(th)}`;
 
     // 页面内提示始终生效，不依赖任何权限
     el.bannerText.textContent = msg;
@@ -893,7 +894,9 @@
 
   async function fetchBalance(opts) {
     opts = opts || {};
-    if (state.busy) return;
+    // 有请求在飞时不要直接丢弃：记下来，等当前这次结束再补一发。
+    // 否则「保存并刷新」「导入配置」会毫无反馈地什么都不做。
+    if (state.busy) { state.pending = true; return; }
     if (!state.key) {
       setStatus('请先填写 API Key');
       // 自动刷新（silent）不该每隔几分钟就把设置面板弹出来、还把光标抢进输入框
@@ -966,6 +969,10 @@
       clearTimeout(abortTimer);
       state.busy = false;
       el.refreshBtn.disabled = false;
+      if (state.pending) {          // 刚才被挡下的那次，现在补上
+        state.pending = false;
+        fetchBalance({ silent: true });
+      }
     }
   }
 
@@ -1023,20 +1030,29 @@
       syncInputs();
       restartTimer();
     }
+    let imported = 0;
     if (Array.isArray(data.s)) {
-      state.samples = data.s
-        .filter(p => p && isFinite(p.t) && isFinite(p.v))
-        .sort((a, b) => a.t - b.t);
+      // 用 num() 而不是 isFinite()：isFinite("100") 和 isFinite(null) 都是 true，
+      // 挡不住字符串和 null。别处（采样恢复、桥回推）用的都是 num，这里要保持一致。
+      const incoming = data.s.filter(p => p && num(p.t) && num(p.v));
+      // 合并而不是整体替换：导入一份旧配置不该抹掉本机已有的历史。
+      // 换到新设备时本机本来就是空的，合并与替换结果相同。
+      const byTime = new Map();
+      for (const p of state.samples.concat(incoming)) byTime.set(p.t, p);
+      state.samples = [...byTime.values()].sort((a, b) => a.t - b.t);
       if (state.samples.length > MAX_SAMPLES) {
         state.samples.splice(0, state.samples.length - MAX_SAMPLES);
       }
       saveSamples();
+      imported = incoming.length;
     }
 
     el.migrateText.value = '';
     syncNotifyHint();
     render();
-    migrateSay('配置已导入。');
+    migrateSay(imported
+      ? `配置已导入：${imported} 条采样，合并后共 ${state.samples.length} 条。`
+      : '配置已导入。');
     // 导入的路径绕过了「保存并刷新」，不在这里补一次的话，
     // 通知权限永远不会被请求，而复选框却是勾着的——告警静默失效。
     ensureNotifyPermission();
@@ -1192,9 +1208,6 @@
   }
 
   // ---------- 版本与更新 ----------
-
-  // 网页这份代码的构建日期。改了网页就顺手改这里。
-  const WEB_BUILD = '2026-09-22';
 
   /** 安卓应用把自己的版本号放在网址上带进来（?appv=1.2）；在浏览器里打开时没有这个参数 */
   function runningAppVersion() {
