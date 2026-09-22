@@ -6,8 +6,8 @@
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0b0e17">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>DeepSeek 余额</title>
 <style>
   :root {
@@ -784,7 +784,7 @@
         if (reg && typeof reg.showNotification === 'function') {
           await reg.showNotification(title, {
             body, tag: 'dsb-low-balance', renotify: true,
-            icon: 'icon-192.png', badge: 'icon-192.png',
+            icon: 'icons/icon-192.png', badge: 'icons/icon-192.png',
           });
           return;
         }
@@ -793,7 +793,7 @@
 
     // 桌面浏览器（以及没有 SW 的情况）走构造器
     try {
-      new Notification(title, { body, tag: 'dsb-low-balance', icon: 'icon-192.png' });
+      new Notification(title, { body, tag: 'dsb-low-balance', icon: 'icons/icon-192.png' });
     } catch (_) {}
   }
 

@@ -11,7 +11,7 @@
         "version": "1.5",
         "code": 6,
         "date": "2026-09-22",
-        "file": "ds-balance-1.5.apk",
+        "file": "releases/ds-balance-1.5.apk",
         "brief": "小组件可缩放，按尺寸自适应",
         "notes": [
           "小组件现在可以自由拖拽缩放（2×2 / 2×3 / 2×4 / 3×3 / 3×4 …）",
@@ -24,7 +24,7 @@
         "version": "1.4",
         "code": 5,
         "date": "2026-09-22",
-        "file": "ds-balance-1.4.apk",
+        "file": "releases/ds-balance-1.4.apk",
         "brief": "小组件立刻跟着更新了",
         "notes": [
           "应用取到新余额后立刻重画小组件，不再等它自己那 30 分钟的周期",
@@ -36,7 +36,7 @@
         "version": "1.3",
         "code": 4,
         "date": "2026-09-22",
-        "file": "ds-balance-1.3.apk",
+        "file": "releases/ds-balance-1.3.apk",
         "brief": "点下载真的能下载了",
         "notes": [
           "修好「点下载没反应」：应用内点下载会交给系统下载，完成后只弹一条通知，装不装由你决定",
@@ -47,7 +47,7 @@
         "version": "1.2",
         "code": 3,
         "date": "2026-09-22",
-        "file": "ds-balance-1.2.apk",
+        "file": "releases/ds-balance-1.2.apk",
         "brief": "新增版本与回退",
         "notes": [
           "新增「版本与更新」：告诉你当前版本、有没有新版，并列出历史版本供回退",
@@ -58,7 +58,7 @@
         "version": "1.1",
         "code": 2,
         "date": "2026-09-22",
-        "file": "ds-balance-1.1.apk",
+        "file": "releases/ds-balance-1.1.apk",
         "brief": "修好挂件拿不到 Key",
         "notes": [
           "改用 evaluateJavascript 主动拉取数据，修好桌面挂件拿不到 API Key 的问题",
@@ -69,7 +69,7 @@
         "version": "1.0",
         "code": 1,
         "date": "2026-09-22",
-        "file": "ds-balance-1.0.apk",
+        "file": "releases/ds-balance-1.0.apk",
         "brief": "首个可安装版本",
         "notes": [
           "余额、今日消耗、预计可用天数",

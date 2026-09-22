@@ -1,17 +1,29 @@
-# 这个仓库只发布 DeepSeek 余额监控这一套 PWA 文件。
-# 采用白名单：默认忽略一切，只放行下面列出的部署所需文件。
-# 这样目录里其他草稿（breakout.html 等）和本地配置（.claude/）永远不会被误传。
-
+# ─────────────────────────────────────────────────────────────
+#  这个目录是工作目录，不是纯粹的仓库。
+#  里面还放着草稿（breakout.html）、安卓工程源码（android/）、
+#  本地配置（.claude/）和开发脚本，它们都不该出现在公开仓库里。
+#
+#  所以用白名单：默认忽略一切，只放行下面列出的发布内容。
+#  好处是以后往这个目录里扔任何新东西，都不会被误传上去。
+#  代价是加新文件时必须在这里放行，否则它会静默地进不了仓库。
+# ─────────────────────────────────────────────────────────────
 *
+
+# 仓库自身的说明与配置
 !.gitignore
+!README.md
+!.nojekyll
+
+# 网页版。GitHub Pages 直接服务根目录，所以这几个必须在根上
 !deepseek-balance.html
 !manifest.json
 !sw.js
-!icon-192.png
-!icon-512.png
-!apple-touch-icon.png
-!.nojekyll
-# 安卓应用包（自用，方便手机直接下载安装）
-!ds-balance.apk
-!ds-balance-*.apk
 !versions.json
+
+# 图标、安装包、README 配图归在子目录里
+!icons/
+!icons/*.png
+!releases/
+!releases/*.apk
+!assets/
+!assets/*.png
